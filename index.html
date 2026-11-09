@@ -2,100 +2,95 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1c1915">
-<title>Canggu sun</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canggu</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    min-height: 100vh;
-    min-height: 100dvh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #1c1915;
-    color: #f4efe8;
-    font-family: system-ui, -apple-system, sans-serif;
-  }
-  main {
-    width: min(28rem, 100%);
-    padding: 2.5rem 1.5rem calc(2.5rem + env(safe-area-inset-bottom));
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 650;
-  }
-  p.when {
-    margin: 0.35rem 0 1.75rem;
-    color: #b7aa9c;
-    font-size: 0.95rem;
-  }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 1rem;
-    padding: 1rem 0;
-    border-top: 1px solid #3d352d;
-  }
-  .label { color: #b7aa9c; font-size: 1rem; }
-  .time {
-    font-size: 2.4rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.03em;
-  }
-  .miss { color: #e7a3a3; margin: 1rem 0 0; }
+  html, body { margin: 0; height: 100%; background: #0e1114; color: #f4f1ea; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8vh 8vw; gap: 7vh; }
+  p { margin: 0; font-size: clamp(2.4rem, 12vw, 4.2rem); font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  p span { display: block; font-size: 0.38em; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #c8bba8; margin-bottom: 0.35em; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Canggu</h1>
-  <p class="when" id="when">…</p>
-  <div class="row"><span class="label">Sunrise</span><span class="time" id="rise">…</span></div>
-  <div class="row"><span class="label">Sunset</span><span class="time" id="set">…</span></div>
-  <p class="miss" id="miss" hidden></p>
+  <p><span>Sunrise</span><b id="up">–</b></p>
+  <p><span>Sunset</span><b id="down">–</b></p>
 </main>
 <script>
-const LAT = -8.6506193;
-const LNG = 115.1365007;
-const TZ = "Asia/Makassar";
+(function () {
+  var LAT = -8.6478, LNG = 115.1385, TZ = "Asia/Makassar";
 
-function todayISO() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"
-  }).format(new Date());
-}
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
 
-function clock(iso) {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-  }).format(new Date(iso));
-}
+  function witaDateParts(d) {
+    var parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(d);
+    var o = {};
+    parts.forEach(function (p) { o[p.type] = p.value; });
+    return { y: +o.year, m: +o.month, d: +o.day, iso: o.year + "-" + o.month + "-" + o.day };
+  }
 
-async function load() {
-  const when = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ, day: "numeric", month: "short", year: "numeric"
-  }).format(new Date());
-  document.getElementById("when").textContent = when + " WITA";
-  const day = todayISO();
-  const url = "https://api.sunrise-sunset.org/json?lat=" + LAT + "&lng=" + LNG + "&formatted=0&date=" + day;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Sun times did not load");
-  const data = await res.json();
-  if (!data.results) throw new Error("Sun times did not load");
-  document.getElementById("rise").textContent = clock(data.results.sunrise);
-  document.getElementById("set").textContent = clock(data.results.sunset);
-}
+  function hmInTz(iso) {
+    var d = new Date(iso);
+    var parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    }).formatToParts(d);
+    var o = {};
+    parts.forEach(function (p) { o[p.type] = p.value; });
+    return o.hour + ":" + o.minute;
+  }
 
-load().catch(function (err) {
-  const miss = document.getElementById("miss");
-  miss.hidden = false;
-  miss.textContent = err.message || "Sun times did not load";
-});
+  function show(up, down) {
+    document.getElementById("up").textContent = up;
+    document.getElementById("down").textContent = down;
+  }
+
+  // NOAA solar calculator. Zenith 90.833° is the standard sunrise/sunset.
+  function noaa(y, m, day) {
+    function rad(x) { return x * Math.PI / 180; }
+    function deg(x) { return x * 180 / Math.PI; }
+    var n = Math.floor(275 * m / 9) - Math.floor((m + 9) / 12) * (1 + Math.floor((y - 4 * Math.floor(y / 4) + 2) / 3)) + day - 30;
+    function event(rising) {
+      var lngHour = LNG / 15;
+      var t = n + ((rising ? 6 : 18) - lngHour) / 24;
+      var M = (0.9856 * t) - 3.289;
+      var L = M + (1.916 * Math.sin(rad(M))) + (0.020 * Math.sin(rad(2 * M))) + 282.634;
+      L = (L + 360) % 360;
+      var RA = deg(Math.atan(0.91764 * Math.tan(rad(L))));
+      RA = (RA + 360) % 360;
+      var Lq = Math.floor(L / 90) * 90;
+      var RAq = Math.floor(RA / 90) * 90;
+      RA = (RA + (Lq - RAq)) / 15;
+      var sinDec = 0.39782 * Math.sin(rad(L));
+      var cosDec = Math.cos(Math.asin(sinDec));
+      var cosH = (Math.cos(rad(90.833)) - (sinDec * Math.sin(rad(LAT)))) / (cosDec * Math.cos(rad(LAT)));
+      if (cosH > 1 || cosH < -1) return null;
+      var H = rising ? 360 - deg(Math.acos(cosH)) : deg(Math.acos(cosH));
+      H = H / 15;
+      var T = H + RA - (0.06571 * t) - 6.622;
+      var UT = (T - lngHour + 24) % 24;
+      var local = (UT + 8 + 24) % 24;
+      var hh = Math.floor(local);
+      var mm = Math.round((local - hh) * 60);
+      if (mm === 60) { hh = (hh + 1) % 24; mm = 0; }
+      return pad(hh) + ":" + pad(mm);
+    }
+    return { up: event(true), down: event(false) };
+  }
+
+  var today = witaDateParts(new Date());
+  var local = noaa(today.y, today.m, today.d);
+  if (local.up && local.down) show(local.up, local.down);
+
+  var url = "https://api.sunrise-sunset.org/json?lat=" + LAT + "&lng=" + LNG +
+    "&date=" + today.iso + "&formatted=0&tzid=" + encodeURIComponent(TZ);
+  fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j || j.status !== "OK" || !j.results) return;
+    show(hmInTz(j.results.sunrise), hmInTz(j.results.sunset));
+  }).catch(function () {});
+})();
 </script>
 </body>
 </html>
